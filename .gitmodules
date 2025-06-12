@@ -1,0 +1,3 @@
+[submodule "datafusion-c"]
+	path = datafusion-c
+	url = https://github.com/Clonkk/datafusion-c

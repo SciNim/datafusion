@@ -10,22 +10,26 @@ type
   SessionContext* = object
     handle*: ptr DFSessionContext
 
-# SessionContext implementation
-proc newSessionContext*(): SessionContext =
-  result.handle = df_session_context_new()
+proc `=wasMoved`*(ctx: var SessionContext) =
+  ctx.handle = nil
 
 proc `=destroy`*(ctx: var SessionContext) =
   if ctx.handle != nil:
     df_session_context_free(ctx.handle)
-    ctx.handle = nil
 
-proc sql*(ctx: SessionContext, query: string): DataFrame =
+
+# SessionContext implementation
+proc newSessionContext*(): ref SessionContext =
+  result = new(SessionContext)
+  result.handle = df_session_context_new()
+
+proc sql*(ctx: ref SessionContext, query: string): DataFrame =
   ## Execute a SQL query and return the result as a DataFrame
   var error: ptr DFError = nil
   result.handle = df_session_context_sql(ctx.handle, query.cstring, error.addr)
   checkError(error)
 
-proc registerCSV*(ctx: SessionContext, name: string, url: string,
+proc registerCSV*(ctx: ref SessionContext, name: string, url: string,
                   options: CSVReadOptions = CSVReadOptions()) =
   ## Register a CSV file/URL as a table in the session context
   var error: ptr DFError = nil
@@ -38,7 +42,7 @@ proc registerCSV*(ctx: SessionContext, name: string, url: string,
   if not success:
     raise newException(DataFusionError, "Failed to register CSV")
 
-proc registerParquet*(ctx: SessionContext, name: string, url: string,
+proc registerParquet*(ctx: ref SessionContext, name: string, url: string,
                       options: ParquetReadOptions = ParquetReadOptions()) =
   ## Register a Parquet file/URL as a table in the session context
   var error: ptr DFError = nil
@@ -51,7 +55,7 @@ proc registerParquet*(ctx: SessionContext, name: string, url: string,
   if not success:
     raise newException(DataFusionError, "Failed to register Parquet")
 
-proc deregister*(ctx: SessionContext, name: string) =
+proc deregister*(ctx: ref SessionContext, name: string) =
   ## Remove a table from the session context
   var error: ptr DFError = nil
   let success = df_session_context_deregister(ctx.handle, name.cstring, error.addr)
@@ -60,15 +64,15 @@ proc deregister*(ctx: SessionContext, name: string) =
     raise newException(DataFusionError, "Failed to deregister table")
 
 # High-level convenience functions
-proc createSessionContext*(): SessionContext =
+proc createSessionContext*(): ref SessionContext =
   ## Create a new DataFusion session context with automatic cleanup
   newSessionContext()
 
-proc executeSQL*(ctx: SessionContext, query: string): DataFrame =
+proc executeSQL*(ctx: ref SessionContext, query: string): DataFrame =
   ## Execute a SQL query and return the result as a DataFrame
   ctx.sql(query)
 
-proc loadCSV*(ctx: SessionContext, tableName: string, filePath: string,
+proc loadCSV*(ctx: ref SessionContext, tableName: string, filePath: string,
               hasHeader: bool = true, delimiter: char = ','): void =
   ## Load a CSV file into the session context as a table
   var options = newCSVReadOptions()
@@ -76,7 +80,7 @@ proc loadCSV*(ctx: SessionContext, tableName: string, filePath: string,
   options.delimiter = delimiter
   ctx.registerCSV(tableName, filePath, options)
 
-proc loadParquet*(ctx: SessionContext, tableName: string, filePath: string): void =
+proc loadParquet*(ctx: ref SessionContext, tableName: string, filePath: string): void =
   ## Load a Parquet file into the session context as a table
   var options = newParquetReadOptions()
   ctx.registerParquet(tableName, filePath, options)

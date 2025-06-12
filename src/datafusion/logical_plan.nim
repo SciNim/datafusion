@@ -36,7 +36,7 @@ type
 
   LogicalPlan* = object
     ## Represents a logical plan that can be executed
-    context*: SessionContext
+    context*: ref SessionContext
     query*: string  # SQL representation of the plan
 
 # Expression builders (similar to datafusion-python's col(), lit(), etc.)
@@ -171,6 +171,8 @@ proc getOperatorSymbol(expr: LogicalExpr): string =
 proc toSql(expr: LogicalExpr): string =
   ## Convert a logical expression to SQL string
   case expr.expr_type:
+  of Function:
+    return expr.column_name
   of Column:
     return expr.column_name
   of Literal:
@@ -182,18 +184,18 @@ proc toSql(expr: LogicalExpr): string =
   of BinaryOp:
     if expr.children.len == 2:
       return "(" & expr.children[0].toSql & " " & getOperatorSymbol(expr) & " " & expr.children[1].toSql & ")"
-  else:
-    return ""
+  of Aggregate:
+    return expr.column_name
 
 # LogicalPlan operations (similar to DataFrame API)
 type
   LogicalPlanBuilder* = object
     ## Builder for constructing logical plans
-    context*: SessionContext
+    context*: ref SessionContext
     current_plan*: string
     table_name*: string
 
-proc scan*(context: SessionContext, table_name: string): LogicalPlanBuilder =
+proc scan*(context: ref SessionContext, table_name: string): LogicalPlanBuilder =
   ## Create a table scan logical plan
   result = LogicalPlanBuilder(
     context: context,
@@ -286,30 +288,3 @@ proc max*(expr: LogicalExpr): LogicalExpr =
     expr_type: Function,
     column_name: "MAX(" & expr.toSql & ")"
   )
-
-# Example usage:
-when isMainModule:
-  let ctx = createSessionContext()
-
-  # Register a table
-  ctx.registerCSV("employees", "employees.csv")
-
-  # Build a logical plan similar to datafusion-python:
-  # SELECT name, department, AVG(salary)
-  # FROM employees
-  # WHERE salary > 50000
-  # GROUP BY department
-  # ORDER BY AVG(salary) DESC
-  # LIMIT 10
-
-  let plan = ctx.scan("employees")
-    .select(col("name"), col("department"), avg(col("salary")))
-    .filter(col("salary") > lit(50000))
-    .groupBy(col("department"))
-    .orderBy(avg(col("salary")))
-    .limit(10)
-    .build()
-
-  # Execute the plan
-  let result = plan.execute()
-  result.show()
